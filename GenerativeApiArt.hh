@@ -46,7 +46,6 @@ class GenerativeApiArt {
 
     if ($json === null){
       $this->json = "";
-
     } else {
       $this->json = $json;
     }
@@ -66,7 +65,11 @@ class GenerativeApiArt {
       $this->author = "(Unknown)";
     }
 
-    $this->title = $hit->_source->title->fr;
+    if ($hit->_source->title->fr === "") {
+      $this->title = $hit->_source->title->fr;
+    } else {
+      $this->title = "(Untitled)";
+    }
 
     if (count($hit->_source->images) > 0){
       $this->real_image_url = $hit->_source->images[0]->urls->large->url;
