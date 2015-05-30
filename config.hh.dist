@@ -1,0 +1,5 @@
+<?hh
+
+class Config {
+ const string KEY = "demo";
+}
