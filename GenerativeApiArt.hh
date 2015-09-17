@@ -8,10 +8,13 @@ class GenerativeApiArt {
   private string $url = "";
   private string $safe_url = "";
   private string $raw_string = "";
-  private string $json = "";
+  private ?object $json = null;
   private string $author = "";
   private string $title = "";
   private string $real_image_url = "";
+  private mixed $intermediary_real_image;
+  private mixed $real_image;
+  private array<string,int> $color = array();
   private string $generated_image = "";
 
   const int MODE_BITMAP = 0;
@@ -44,8 +47,9 @@ class GenerativeApiArt {
     $this->raw_string = trim(preg_replace('/\s+/', ' ', $result));
     $json = json_decode($result);
 
+
     if ($json === null){
-      $this->json = "";
+      $this->json = null;
     } else {
       $this->json = $json;
     }
@@ -56,36 +60,34 @@ class GenerativeApiArt {
 
   public function extract(): this
   {
+    
+    if ($this->json) {
+      $hit = $this->json->hits->hits[0];
 
-    $hit = $this->json->hits->hits[0];
+      if (count($hit->_source->authors) > 0){
+        $this->author = $hit->_source->authors[0]->name->fr;
+      } else {
+        $this->author = "(Unknown)";
+      }
 
-    if (count($hit->_source->authors) > 0){
-      $this->author = $hit->_source->authors[0]->name->fr;
-    } else {
-      $this->author = "(Unknown)";
-    }
-
-    if ($hit->_source->title->fr === "") {
       $this->title = $hit->_source->title->fr;
-    } else {
-      $this->title = "(Untitled)";
-    }
 
-    if (count($hit->_source->images) > 0){
-      $this->real_image_url = $hit->_source->images[0]->urls->large->url;
+      if (count($hit->_source->images) > 0){
+        $this->real_image_url = $hit->_source->images[0]->urls->large->url;
 
-      $this->intermediary_real_image = imagecreatefromjpeg($this->real_image_url);
-      $width = imagesx($this->intermediary_real_image);
-      $height = imagesy($this->intermediary_real_image);
-      $pixel = imagecreatetruecolor(1, 1);
-      imagecopyresampled($pixel, $this->intermediary_real_image, 0, 0, 0, 0, 1, 1, $width, $height);
+        $this->intermediary_real_image = imagecreatefromjpeg($this->real_image_url);
+        $width = imagesx($this->intermediary_real_image);
+        $height = imagesy($this->intermediary_real_image);
+        $pixel = imagecreatetruecolor(1, 1);
+        imagecopyresampled($pixel, $this->intermediary_real_image, 0, 0, 0, 0, 1, 1, $width, $height);
 
-      // extract medium color
-      $rgb = imagecolorat($pixel, 0, 0);
-      $this->color = imagecolorsforindex($pixel, $rgb);
+        // extract medium color
+        $rgb = imagecolorat($pixel, 0, 0);
+        $this->color = imagecolorsforindex($pixel, $rgb);
 
-      $this->real_image = imagecreatetruecolor(500, 500);
-      imagecopyresampled($this->real_image, $this->intermediary_real_image, 0, 0, 0, 0, 500, 500, $width, $height);
+        $this->real_image = imagecreatetruecolor(500, 500);
+        imagecopyresampled($this->real_image, $this->intermediary_real_image, 0, 0, 0, 0, 500, 500, $width, $height);
+      }
     }
 
     return $this;
@@ -129,7 +131,7 @@ class GenerativeApiArt {
         for ($y=0; $y < $this->size; $y++) {
 
           $current_char = $current[($x*$this->size + $y) % $l];
-          $val = intval((ord($current_char) - 96)/10);
+          $val = intval((ord($current_char) - 96));
           if ($x < $width && $y < $height) {
             $real_color = imagecolorat($this->real_image, $x, $y);
             $real_color = imagecolorsforindex($this->real_image, $real_color);
@@ -137,7 +139,7 @@ class GenerativeApiArt {
             $real_color = imagecolorallocate($this->real_image, 0,0,0);
           }
 
-          $color = imagecolorallocate($this->generated_image, ($real_color['red'] * $val) % 255, ($real_color['green'] * $val) % 255, ($real_color['blue'] * $val) % 255);
+          $color = imagecolorallocate($this->generated_image, ($real_color['red'] + $val) % 255, ($real_color['green'] + $val) % 255, ($real_color['blue'] + $val) % 255);
           
           imagesetpixel($this->generated_image, $x, $y, $color);
 
@@ -166,7 +168,7 @@ class GenerativeApiArt {
     imagedestroy($this->real_image);
   
     // Output a very simple page in HTML
-    echo '<html><head><link href="http://fonts.googleapis.com/css?family=Lato:100,300" rel="stylesheet" type="text/css"><link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/css/bootstrap.min.css" rel="stylesheet"><style>h1 {font-family: "Lato", sans-serif; text-align: center;} .header{ width:100%; border-bottom:1px solid #BBB; padding: 10px 20px;background: #EEE; margin-bottom: 50px; font-family: "Lato", sans-serif;} .clip {clip-path:polygon(0 0,' . $this->size . 'px 0,' . $this->size . 'px 100%, 0 100%); height:' . $this->size .'px; -webkit-clip-path:polygon(0 0,' . $this->size . 'px 0,' . $this->size . 'px 100%, 0 100%);}.images{display: block; width: 1010px; margin: auto; margin-top:50px;} .well{margin:auto; margin-top: 40px; width: 1000px;} .container{width:500px; height:500px; overflow:hidden;vertical-align:top;display: inline-block;margin-left: 5px;background: black; padding: 0;} .explanation{font-style: italic; color:#555;text-align:center;} a.hover{text-decoration:none;}</style></head>';
+    echo '<html><head><link href="http://fonts.googleapis.com/css?family=Lato:100,300" rel="stylesheet" type="text/css"><link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/css/bootstrap.min.css" rel="stylesheet"><style>h1 {font-family: "Lato", sans-serif; text-align: center;} .header{ width:100%; border-bottom:1px solid #BBB; padding: 10px 20px;background: #EEE; margin-bottom: 50px; font-family: "Lato", sans-serif;} .clip {clip-path:polygon(0 0,' . $this->size . 'px 0,' . $this->size . 'px 100%, 0 100%); height:' . $this->size .'px; -webkit-clip-path:polygon(0 0,' . $this->size . 'px 0,' . $this->size . 'px 100%, 0 100%);}.images{display: block; width: 1010px; margin: auto; margin-top:50px;} .well{margin:auto; margin-top: 40px; width: 1000px;} .container{width:500px; height:500px; overflow:hidden;vertical-align:top;display: inline-block;margin-left: 5px;background: black; padding: 0;} .explanation{font-style: italic; color:#555;text-align:center;} a.hover{text-decoration:none;}</style><meta http-equiv="Content-Type" content="text/html; charset=utf-8"></head>';
     echo '<body>';
     echo '<div class="header">GENERATIVE API ART <span style="float: right"><a href="/">&#8635; REGÉNÉRER</a></span></div>';
     echo '<div class="explanation">Une représentation visuelle du JSON renvoyé par l\'api <a href="http://docs.art.rmngp.fr/">RMN-GP</a> pour une requête sur une œuvre aléatoire.</div>';
